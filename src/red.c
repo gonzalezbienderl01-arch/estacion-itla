@@ -235,3 +235,111 @@ int red_publicar_mqtt(Red *r, const char *topico, const char *mensaje)
     }
     return 0;
 }
+
+/* ---------- Suscripción MQTT ----------
+ * libcurl no entrega texto: cada mensaje llega como 2 bytes con el largo del
+ * tópico (primero el byte alto), el tópico y el contenido. Varios mensajes
+ * pueden llegar pegados, o uno partido en dos llamadas. Como cada contenido
+ * termina en '\n', acumulamos en buf y procesamos cada mensaje completo. */
+#define MQTT_BUF        4096
+#define MQTT_MAX_TOPICO 256
+#define UPKEEP_MS       20000L   /* PINGREQ cada 20 s para que el broker no corte */
+
+typedef struct {
+    char          buf[MQTT_BUF];
+    size_t        len;
+    AlRecibirMqtt fn;
+    void         *ud;
+} Suscripcion;
+
+static void procesar_mensaje(Suscripcion *m, const char *topico, size_t tlen, char *texto)
+{
+    char t[MQTT_MAX_TOPICO];
+    if (tlen >= sizeof t)
+        return;                         /* tópico absurdo: se ignora */
+    memcpy(t, topico, tlen);
+    t[tlen] = '\0';
+    char *cr = strchr(texto, '\r');
+    if (cr != NULL)
+        *cr = '\0';
+    m->fn(t, texto, m->ud);
+}
+
+static size_t al_recibir_mqtt(char *ptr, size_t size, size_t nmemb, void *ud)
+{
+    size_t n = size * nmemb;
+    Suscripcion *m = ud;
+
+    if (n > sizeof m->buf - m->len) {   /* no cabe: se descarta lo acumulado */
+        m->len = 0;
+        if (n > sizeof m->buf)
+            return n;
+    }
+    memcpy(m->buf + m->len, ptr, n);
+    m->len += n;
+
+    for (;;) {                          /* procesa todos los mensajes completos */
+        if (m->len < 2)
+            break;
+        size_t tlen = ((size_t)(unsigned char)m->buf[0] << 8) | (unsigned char)m->buf[1];
+        if (m->len < 2 + tlen)
+            break;
+        char *carga = m->buf + 2 + tlen;
+        char *fin = memchr(carga, '\n', m->len - 2 - tlen);
+        if (fin == NULL)
+            break;                      /* el mensaje aún no llegó entero */
+        *fin = '\0';
+        procesar_mensaje(m, m->buf + 2, tlen, carga);
+        size_t usado = (size_t)(fin - m->buf) + 1;
+        memmove(m->buf, m->buf + usado, m->len - usado);
+        m->len -= usado;
+    }
+    return n;                           /* siempre size * nmemb */
+}
+
+/* libcurl la llama cada poco tiempo; devolver 1 corta curl_easy_perform. */
+static int al_progreso(void *ud, curl_off_t a, curl_off_t b, curl_off_t c, curl_off_t d)
+{
+    (void)a; (void)b; (void)c; (void)d;
+    DebeSalir salir = *(DebeSalir *)ud;
+    return salir() ? 1 : 0;
+}
+
+int red_suscribir_mqtt(Red *r, const char *topico, AlRecibirMqtt fn, void *ud,
+                       DebeSalir salir)
+{
+    char url[512];
+    int k = snprintf(url, sizeof url, "mqtt://%s:1883/%s", r->host, topico);
+    if (k < 0 || (size_t)k >= sizeof url) {
+        fprintf(stderr, "Error: URL MQTT demasiado larga\n");
+        return -1;
+    }
+
+    Suscripcion *m = calloc(1, sizeof *m);
+    if (m == NULL) {
+        fprintf(stderr, "Error: sin memoria para la suscripción\n");
+        return -1;
+    }
+    m->fn = fn;
+    m->ud = ud;
+
+    curl_easy_reset(r->mqtt);
+    curl_easy_setopt(r->mqtt, CURLOPT_URL, url);        /* sin POSTFIELDS = suscribir */
+    curl_easy_setopt(r->mqtt, CURLOPT_USERNAME, r->matricula);
+    curl_easy_setopt(r->mqtt, CURLOPT_PASSWORD, r->token);
+    curl_easy_setopt(r->mqtt, CURLOPT_CONNECTTIMEOUT, CONNECT_S);
+    /* sin CURLOPT_TIMEOUT: la suscripción debe quedarse abierta */
+    curl_easy_setopt(r->mqtt, CURLOPT_WRITEFUNCTION, al_recibir_mqtt);
+    curl_easy_setopt(r->mqtt, CURLOPT_WRITEDATA, m);
+    curl_easy_setopt(r->mqtt, CURLOPT_NOPROGRESS, 0L);
+    curl_easy_setopt(r->mqtt, CURLOPT_XFERINFOFUNCTION, al_progreso);
+    curl_easy_setopt(r->mqtt, CURLOPT_XFERINFODATA, &salir);
+    curl_easy_setopt(r->mqtt, CURLOPT_UPKEEP_INTERVAL_MS, UPKEEP_MS);
+
+    CURLcode rc = curl_easy_perform(r->mqtt);
+    free(m);
+    if (rc == CURLE_OK || rc == CURLE_ABORTED_BY_CALLBACK)
+        return 0;
+    fprintf(stderr, "MQTT: la suscripción se cortó: %s\n", curl_easy_strerror(rc));
+    return -1;
+}

@@ -8,6 +8,7 @@
 #include "red.h"
 #include "datos.h"
 #include "enviar.h"
+#include "escuchar.h"
 
 #define RUTA_DB      "estacion.db"
 #define LIMITE_PAG   200     /* filas por página (máximo que acepta el servidor) */
@@ -296,7 +297,7 @@ static void uso(const char *prog)
             "  descargar  nivel 1: baja las lecturas y envía el resumen\n"
             "  analizar   nivel 2: estadísticas por máquina (--ver: sin enviar)\n"
             "  enviar     niveles 3 y 4: telemetría + latido MQTT (Ctrl+C para parar)\n"
-            "  escuchar   nivel 5 (pendiente)\n", prog);
+            "  escuchar   nivel 5: alarmas MQTT (correr junto con enviar)\n", prog);
 }
 
 int main(int argc, char *argv[])
@@ -316,10 +317,9 @@ int main(int argc, char *argv[])
     if (strcmp(argv[1], "enviar") == 0)
         return enviar_ejecutar();
 
-    if (strcmp(argv[1], "escuchar") == 0) {
-        fprintf(stderr, "'%s' todavía no está implementado.\n", argv[1]);
-        return 1;
-    }
+    if (strcmp(argv[1], "escuchar") == 0)
+        return escuchar_ejecutar();
+
     uso(argv[0]);
     return 1;
 }

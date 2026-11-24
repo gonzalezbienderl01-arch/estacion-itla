@@ -44,6 +44,19 @@ long red_post_reintentos(Red *r, const char *ruta, const char *json, Respuesta *
    contraseña = token. Devuelve 0 si se publicó, -1 si falló (no reintenta). */
 int red_publicar_mqtt(Red *r, const char *topico, const char *mensaje);
 
+/* Se llama con cada mensaje MQTT completo: tópico y texto (sin el '\n'). */
+typedef void (*AlRecibirMqtt)(const char *topico, const char *texto, void *ud);
+
+/* Devuelve distinto de 0 cuando hay que cortar la suscripción (Ctrl+C). */
+typedef int (*DebeSalir)(void);
+
+/* Se suscribe a un tópico y llama a fn con cada mensaje. Usa el handle MQTT,
+   nunca el de HTTP. No regresa mientras la conexión siga viva: vuelve cuando
+   el broker la cierra, cuando falla la red o cuando salir() pide cortar.
+   Devuelve 0 si la conexión terminó normal, -1 si hubo error. */
+int red_suscribir_mqtt(Red *r, const char *topico, AlRecibirMqtt fn, void *ud,
+                       DebeSalir salir);
+
 /* Pausa en milisegundos (para respetar el límite de 5 peticiones/s). */
 void red_esperar_ms(long ms);
 

@@ -32,7 +32,7 @@ make clean
 | `./estacion descargar` | 1 · Descarga completa | listo |
 | `./estacion analizar` | 2 · Análisis SQL | listo (`--ver` muestra sin enviar) |
 | `./estacion enviar` | 3 y 4 · Telemetría y latido | listo (Ctrl+C para parar) |
-| `./estacion escuchar` | 5 · Alarmas MQTT | pendiente |
+| `./estacion escuchar` | 5 · Alarmas MQTT | listo (en otra terminal, junto con `enviar`) |
 
 ## Estructura
 
@@ -41,6 +41,20 @@ make clean
 - `src/datos.c/.h` — SQLite: WAL, `busy_timeout`, las 4 tablas, sentencias preparadas y transacciones.
 - `src/sensor.c/.h` — sensor simulado: temperatura 25–45 °C (onda lenta de 10 min + ruido) y corriente 2–5 A.
 - `src/enviar.c/.h` — bucle de `enviar` (niveles 3 y 4).
+- `src/escuchar.c/.h` — suscripción a alarmas (nivel 5).
+
+## Sesión de evaluación (niveles 3, 4 y 5)
+
+El servidor solo manda alarmas a quien tiene un latido reciente, así que se usan dos terminales a la vez:
+
+```bash
+# terminal 1
+./estacion enviar
+# terminal 2
+./estacion escuchar
+```
+
+Dejar ambas corriendo al menos 15 minutos y terminar con Ctrl+C.
 
 ## Decisiones
 
@@ -57,4 +71,10 @@ make clean
 - **Bucle que no se bloquea**: cada 250 ms revisa si toca leer el sensor, publicar el latido o enviar **una** pendiente. Ante un 503 no se duerme: marca "no enviar hasta" (Retry-After + 0,5 s) y sigue guardando lecturas. Así no se hacen peticiones antes de que venza Retry-After (M7) y nunca más de 4 por segundo (sin 429, M11).
 - **Latido MQTT (nivel 4)**: cada `latido_s` publica `LATIDO;<seq>;<pendientes>;<ts>` en `itla/estudiantes/<MATRICULA>/latido` con un *easy handle* aparte. Si el broker no responde, el latido se pierde (QoS 0) y el bucle sigue.
 - **Ctrl+C**: `sigaction` pone una bandera; el bucle termina la vuelta, cierra la base y los handles y muestra un resumen.
+- **Suscripción MQTT (nivel 5)**: libcurl entrega bytes, no texto: 2 bytes con el largo del tópico, el tópico y el contenido. Se acumulan en un búfer y se procesa cada mensaje completo (terminado en `\n`), aunque lleguen varios pegados o uno partido.
+- **Alarmas sin duplicar**: `codigo PRIMARY KEY` en `alarmas`. Si una alarma ya tiene `ts_ack`, se ignora (el broker la retiene y la reenvía al reconectar). `NINGUNA;<ts>` se ignora.
+- **Confirmación con otro handle**: el ack (`POST /api/v1/alarmas/ack`) usa el *easy handle* HTTP; la suscripción usa el de MQTT. 200 y 409 cuentan como confirmada.
+- **Reconexión**: `curl_easy_perform` no regresa mientras la conexión viva; cuando el broker la cierra se reconecta con espera creciente (1, 2, 4 ... 30 s), que vuelve a 1 s si la conexión duró más de 30 s. `CURLOPT_UPKEEP_INTERVAL_MS` manda PINGREQ cada 20 s para que no la corte.
+- **Ctrl+C en `escuchar`**: `CURLOPT_NOPROGRESS = 0` con una `CURLOPT_XFERINFOFUNCTION` que devuelve 1 cuando la bandera de SIGINT está puesta; así `perform` se corta aunque esté bloqueado.
+- **Dos procesos, una base**: `PRAGMA journal_mode=WAL` y `sqlite3_busy_timeout(db, 2000)` evitan `database is locked`.
 - **Límite de ritmo**: pausa de 250 ms entre páginas (4 peticiones/s). Ante 429/503 se espera lo que diga `Retry-After`; ante fallo de red, 1, 2, 4 ... hasta 30 s.

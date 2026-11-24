@@ -77,4 +77,14 @@ int datos_sumar_intento(sqlite3 *db, long long seq);
 /* Cuántas lecturas quedan sin enviar. Devuelve -1 si hay error. */
 long long datos_contar_pendientes(sqlite3 *db);
 
+/* Alarmas (nivel 5). Devuelve 1 si la alarma ya tiene ts_ack, 0 si no, -1 error. */
+int datos_alarma_confirmada(sqlite3 *db, const char *codigo);
+
+/* Guarda una alarma recibida (INSERT OR IGNORE por codigo). */
+int datos_guardar_alarma(sqlite3 *db, const char *codigo, const char *maquina,
+                         long long ts_servidor, long long ts_recibida);
+
+/* Anota la hora de confirmación de una alarma. */
+int datos_marcar_ack(sqlite3 *db, const char *codigo, long long ts_ack);
+
 #endif

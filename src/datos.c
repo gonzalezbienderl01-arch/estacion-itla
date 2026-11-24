@@ -413,3 +413,65 @@ long long datos_contar_pendientes(sqlite3 *db)
     sqlite3_finalize(st);
     return n;
 }
+
+int datos_alarma_confirmada(sqlite3 *db, const char *codigo)
+{
+    sqlite3_stmt *st = NULL;
+    const char *sql = "SELECT ts_ack IS NOT NULL FROM alarmas WHERE codigo = ?;";
+    if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) != SQLITE_OK) {
+        fprintf(stderr, "Error al preparar: %s\n", sqlite3_errmsg(db));
+        return -1;
+    }
+    sqlite3_bind_text(st, 1, codigo, -1, SQLITE_STATIC);
+    int res = 0;
+    int rc = sqlite3_step(st);
+    if (rc == SQLITE_ROW)
+        res = sqlite3_column_int(st, 0);
+    else if (rc != SQLITE_DONE)
+        res = -1;
+    sqlite3_finalize(st);
+    return res;
+}
+
+int datos_guardar_alarma(sqlite3 *db, const char *codigo, const char *maquina,
+                         long long ts_servidor, long long ts_recibida)
+{
+    sqlite3_stmt *st = NULL;
+    const char *sql =
+        "INSERT OR IGNORE INTO alarmas (codigo, maquina, ts_servidor, ts_recibida) "
+        "VALUES (?, ?, ?, ?);";
+    if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) != SQLITE_OK) {
+        fprintf(stderr, "Error al preparar: %s\n", sqlite3_errmsg(db));
+        return -1;
+    }
+    sqlite3_bind_text(st, 1, codigo, -1, SQLITE_STATIC);
+    sqlite3_bind_text(st, 2, maquina, -1, SQLITE_STATIC);
+    sqlite3_bind_int64(st, 3, ts_servidor);
+    sqlite3_bind_int64(st, 4, ts_recibida);
+    int rc = sqlite3_step(st);
+    sqlite3_finalize(st);
+    if (rc != SQLITE_DONE) {
+        fprintf(stderr, "Error al guardar la alarma %s: %s\n", codigo, sqlite3_errmsg(db));
+        return -1;
+    }
+    return 0;
+}
+
+int datos_marcar_ack(sqlite3 *db, const char *codigo, long long ts_ack)
+{
+    sqlite3_stmt *st = NULL;
+    const char *sql = "UPDATE alarmas SET ts_ack = ? WHERE codigo = ?;";
+    if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) != SQLITE_OK) {
+        fprintf(stderr, "Error al preparar: %s\n", sqlite3_errmsg(db));
+        return -1;
+    }
+    sqlite3_bind_int64(st, 1, ts_ack);
+    sqlite3_bind_text(st, 2, codigo, -1, SQLITE_STATIC);
+    int rc = sqlite3_step(st);
+    sqlite3_finalize(st);
+    if (rc != SQLITE_DONE) {
+        fprintf(stderr, "Error al confirmar %s: %s\n", codigo, sqlite3_errmsg(db));
+        return -1;
+    }
+    return 0;
+}
