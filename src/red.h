@@ -1,3 +1,13 @@
+/*********************************************************/
+/*           Programación para mecatrónicos               */
+/*  Nombre:    Bienderl Gonzalez                          */
+/*  Matricula: 2024-1302                                  */
+/*  Seccion:   Miercoles                                  */
+/*  Practica:  Estacion de Telemetria                     */
+/*  Fecha:     23/11/2026                                 */
+/*  Link Practica: https://github.com/gonzalezbienderl01-arch/estacion-itla */
+/*********************************************************/
+
 /* red.h - todo lo de libcurl (HTTP y, más adelante, MQTT) */
 #ifndef RED_H
 #define RED_H

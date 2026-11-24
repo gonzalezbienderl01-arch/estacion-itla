@@ -1,3 +1,13 @@
+/*********************************************************/
+/*           Programación para mecatrónicos               */
+/*  Nombre:    Bienderl Gonzalez                          */
+/*  Matricula: 2024-1302                                  */
+/*  Seccion:   Miercoles                                  */
+/*  Practica:  Estacion de Telemetria                     */
+/*  Fecha:     23/11/2026                                 */
+/*  Link Practica: https://github.com/gonzalezbienderl01-arch/estacion-itla */
+/*********************************************************/
+
 /* datos.h - todo lo de SQLite */
 #ifndef DATOS_H
 #define DATOS_H

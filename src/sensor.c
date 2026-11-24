@@ -1,3 +1,13 @@
+/*********************************************************/
+/*           Programación para mecatrónicos               */
+/*  Nombre:    Bienderl Gonzalez                          */
+/*  Matricula: 2024-1302                                  */
+/*  Seccion:   Miercoles                                  */
+/*  Practica:  Estacion de Telemetria                     */
+/*  Fecha:     23/11/2026                                 */
+/*  Link Practica: https://github.com/gonzalezbienderl01-arch/estacion-itla */
+/*********************************************************/
+
 /* sensor.c - sensor simulado (no hay DHT22 conectado) */
 #include "sensor.h"
 

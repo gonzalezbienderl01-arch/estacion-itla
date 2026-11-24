@@ -1,3 +1,13 @@
+/*********************************************************/
+/*           Programación para mecatrónicos               */
+/*  Nombre:    Bienderl Gonzalez                          */
+/*  Matricula: 2024-1302                                  */
+/*  Seccion:   Miercoles                                  */
+/*  Practica:  Estacion de Telemetria                     */
+/*  Fecha:     23/11/2026                                 */
+/*  Link Practica: https://github.com/gonzalezbienderl01-arch/estacion-itla */
+/*********************************************************/
+
 /* escuchar.c - ./estacion escuchar (nivel 5)
  *
  * Se suscribe a itla/planta/<MATRICULA>/alarma. Por cada "ALARMA;<codigo>;<maquina>;<ts>":
