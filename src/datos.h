@@ -17,4 +17,24 @@ int datos_guardar_config(sqlite3 *db, char *texto);
 /* Lee un valor de la tabla config. Devuelve 0 si lo encontró. */
 int datos_leer_config(sqlite3 *db, const char *clave, char *valor, size_t n);
 
+/* Transacciones: BEGIN / COMMIT / ROLLBACK. Devuelven 0 si van bien. */
+int datos_iniciar(sqlite3 *db);
+int datos_confirmar(sqlite3 *db);
+int datos_cancelar(sqlite3 *db);
+
+/* Resultado de guardar una página del CSV de /lecturas. */
+typedef struct {
+    int       filas;    /* filas de datos que traía la página */
+    int       nuevas;   /* filas insertadas (las repetidas se ignoran) */
+    long long max_id;   /* id más alto de la página */
+} Pagina;
+
+/* Guarda en lecturas_planta las filas del CSV (con cabecera).
+   Los campos vacíos se guardan como NULL. Usa INSERT OR IGNORE.
+   No abre transacción: la abre quien llama. Devuelve 0 si va bien. */
+int datos_guardar_lecturas(sqlite3 *db, char *csv, Pagina *pag);
+
+/* COUNT(*) y SUM(id) de lecturas_planta. Devuelve 0 si va bien. */
+int datos_resumen_lecturas(sqlite3 *db, long long *filas, long long *suma_ids);
+
 #endif

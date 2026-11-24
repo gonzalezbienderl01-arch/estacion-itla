@@ -17,6 +17,7 @@ typedef struct {
     char  host[256];
     char  token[64];
     char  matricula[32];
+    long  retry_after;  /* segundos de Retry-After de la última respuesta (0 si no vino) */
 } Red;
 
 /* Lee ITLA_HOST, ITLA_TOKEN e ITLA_MATRICULA y crea el handle.
@@ -30,6 +31,16 @@ long red_get(Red *r, const char *ruta, Respuesta *resp);
 
 /* Hace POST con un cuerpo JSON. Mismo valor de retorno que red_get. */
 long red_post(Red *r, const char *ruta, const char *json, Respuesta *resp);
+
+/* Igual que red_get/red_post, pero reintenta solo:
+   - fallo de red: espera 1, 2, 4 ... hasta 30 s
+   - HTTP 429 o 503: espera lo que diga Retry-After (o 1 s)
+   Devuelve el último código obtenido (o -1). */
+long red_get_reintentos(Red *r, const char *ruta, Respuesta *resp);
+long red_post_reintentos(Red *r, const char *ruta, const char *json, Respuesta *resp);
+
+/* Pausa en milisegundos (para respetar el límite de 5 peticiones/s). */
+void red_esperar_ms(long ms);
 
 void respuesta_liberar(Respuesta *resp);
 

@@ -29,7 +29,7 @@ make clean
 | Subcomando | Nivel | Estado |
 |---|---|---|
 | `./estacion config` | 0 · Hola servidor | listo |
-| `./estacion descargar` | 1 · Descarga completa | pendiente |
+| `./estacion descargar` | 1 · Descarga completa | listo |
 | `./estacion analizar` | 2 · Análisis SQL | pendiente |
 | `./estacion enviar` | 3 y 4 · Telemetría y latido | pendiente |
 | `./estacion escuchar` | 5 · Alarmas MQTT | pendiente |
@@ -45,3 +45,8 @@ make clean
 - **Token solo por entorno**: se valida que tenga 32 caracteres y nunca se imprime.
 - **`curl_easy_reset` antes de cada petición**: limpia las opciones de la anterior (por ejemplo, un POST), pero conserva la conexión abierta.
 - **`INSERT OR REPLACE` en `config`**: volver a correr `config` actualiza los valores en vez de fallar por la PRIMARY KEY.
+- **Descarga paginada**: pide `desde_id=<id más alto recibido>&limite=200` hasta que una página traiga menos de 200 filas. El servidor repite filas entre páginas a propósito; `id PRIMARY KEY` + `INSERT OR IGNORE` las absorbe.
+- **Una sola transacción** para toda la descarga: si falla una página, `ROLLBACK` y la base queda como estaba.
+- **CSV con campos vacíos**: se separa con `strchr` (no `strtok`, que se salta `,,`). Un campo vacío o no numérico se guarda como `NULL`.
+- **`filas_unicas` y `suma_ids` se calculan con SQL** (`COUNT(*)`, `SUM(id)`), no con contadores en C.
+- **Límite de ritmo**: pausa de 250 ms entre páginas (4 peticiones/s). Ante 429/503 se espera lo que diga `Retry-After`; ante fallo de red, 1, 2, 4 ... hasta 30 s.

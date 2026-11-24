@@ -2,14 +2,18 @@
 #define _POSIX_C_SOURCE 200809L
 #include "red.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #define USER_AGENT     "estacion-itla/1.0"
 #define TIMEOUT_S      5L   /* tiempo máximo de toda la petición */
 #define CONNECT_S      3L   /* tiempo máximo para conectar */
 #define LARGO_TOKEN    32
+#define MAX_INTENTOS   6    /* intentos totales de una petición con reintentos */
+#define ESPERA_MAX_S   30   /* tope de la espera creciente */
 
 /* Copia una variable de entorno en dst. Devuelve -1 si no existe o no cabe. */
 static int leer_env(const char *nombre, char *dst, size_t n)
@@ -135,6 +139,11 @@ static long peticion(Red *r, const char *ruta, const char *json, Respuesta *resp
     /* Nivel 2 de error: ¿qué respondió el servidor? (código HTTP) */
     long codigo = 0;
     curl_easy_getinfo(r->curl, CURLINFO_RESPONSE_CODE, &codigo);
+
+    curl_off_t espera = 0;
+    if (curl_easy_getinfo(r->curl, CURLINFO_RETRY_AFTER, &espera) != CURLE_OK)
+        espera = 0;
+    r->retry_after = (long)espera;
     return codigo;
 }
 
@@ -146,4 +155,51 @@ long red_get(Red *r, const char *ruta, Respuesta *resp)
 long red_post(Red *r, const char *ruta, const char *json, Respuesta *resp)
 {
     return peticion(r, ruta, json, resp);
+}
+
+void red_esperar_ms(long ms)
+{
+    struct timespec t = { ms / 1000, (ms % 1000) * 1000000L };
+    /* si una señal la interrumpe (EINTR), termina de esperar lo que falta */
+    while (nanosleep(&t, &t) != 0 && errno == EINTR)
+        ;
+}
+
+/* Repite la petición mientras falle la red o el servidor pida esperar. */
+static long con_reintentos(Red *r, const char *ruta, const char *json, Respuesta *resp)
+{
+    long espera_red = 1;
+    long codigo = -1;
+
+    for (int intento = 1; intento <= MAX_INTENTOS; intento++) {
+        codigo = peticion(r, ruta, json, resp);
+        if (codigo != -1 && codigo != 429 && codigo != 503)
+            return codigo;              /* respuesta definitiva (buena o mala) */
+        if (intento == MAX_INTENTOS)
+            break;
+
+        long s;
+        if (codigo == -1) {             /* fallo de red: 1, 2, 4 ... 30 s */
+            s = espera_red;
+            espera_red = (espera_red * 2 > ESPERA_MAX_S) ? ESPERA_MAX_S : espera_red * 2;
+        } else {                        /* 429/503: lo que pida el servidor */
+            s = (r->retry_after > 0) ? r->retry_after : 1;
+            respuesta_liberar(resp);
+        }
+        fprintf(stderr, "  %s: %s, reintento %d en %ld s\n", ruta,
+                codigo == -1 ? "sin red" : (codigo == 429 ? "HTTP 429" : "HTTP 503"),
+                intento, s);
+        red_esperar_ms(s * 1000);
+    }
+    return codigo;
+}
+
+long red_get_reintentos(Red *r, const char *ruta, Respuesta *resp)
+{
+    return con_reintentos(r, ruta, NULL, resp);
+}
+
+long red_post_reintentos(Red *r, const char *ruta, const char *json, Respuesta *resp)
+{
+    return con_reintentos(r, ruta, json, resp);
 }
