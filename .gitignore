@@ -1,0 +1,6 @@
+estacion.db
+estacion.db-*
+build/
+estacion
+.env
+*.o
