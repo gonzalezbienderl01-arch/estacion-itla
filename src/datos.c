@@ -319,3 +319,97 @@ int datos_analizar_maquina(sqlite3 *db, const char *maquina, double umbral, Anal
     sqlite3_finalize(st);
     return res;
 }
+
+/* Ejecuta una sentencia con un solo parámetro entero (seq). */
+static int ejecutar_con_seq(sqlite3 *db, const char *sql, long long seq)
+{
+    sqlite3_stmt *st = NULL;
+    if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) != SQLITE_OK) {
+        fprintf(stderr, "Error al preparar: %s\n", sqlite3_errmsg(db));
+        return -1;
+    }
+    sqlite3_bind_int64(st, 1, seq);
+    int rc = sqlite3_step(st);
+    sqlite3_finalize(st);
+    if (rc != SQLITE_DONE) {
+        fprintf(stderr, "Error SQLite (seq %lld): %s\n", seq, sqlite3_errmsg(db));
+        return -1;
+    }
+    return 0;
+}
+
+int datos_nueva_telemetria(sqlite3 *db, long long ts, double temp, double corriente,
+                           long long *seq)
+{
+    /* seq = MAX(seq) + 1 en la misma sentencia: no hay carrera ni contador en C */
+    const char *sql =
+        "INSERT INTO telemetria (seq, ts, temp, corriente, enviado, intentos) "
+        "SELECT COALESCE(MAX(seq), 0) + 1, ?, ?, ?, 0, 0 FROM telemetria;";
+    sqlite3_stmt *st = NULL;
+    if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) != SQLITE_OK) {
+        fprintf(stderr, "Error al preparar: %s\n", sqlite3_errmsg(db));
+        return -1;
+    }
+    sqlite3_bind_int64(st, 1, ts);
+    sqlite3_bind_double(st, 2, temp);
+    sqlite3_bind_double(st, 3, corriente);
+    int rc = sqlite3_step(st);
+    sqlite3_finalize(st);
+    if (rc != SQLITE_DONE) {
+        fprintf(stderr, "Error al guardar la lectura: %s\n", sqlite3_errmsg(db));
+        return -1;
+    }
+    *seq = sqlite3_last_insert_rowid(db);   /* seq INTEGER PRIMARY KEY = rowid */
+    return 0;
+}
+
+int datos_siguiente_pendiente(sqlite3 *db, Telemetria *t)
+{
+    const char *sql =
+        "SELECT seq, ts, temp, corriente FROM telemetria "
+        "WHERE enviado = 0 ORDER BY seq LIMIT 1;";
+    sqlite3_stmt *st = NULL;
+    if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) != SQLITE_OK) {
+        fprintf(stderr, "Error al preparar: %s\n", sqlite3_errmsg(db));
+        return -1;
+    }
+    int res = 0;
+    int rc = sqlite3_step(st);
+    if (rc == SQLITE_ROW) {
+        t->seq = sqlite3_column_int64(st, 0);
+        t->ts = sqlite3_column_int64(st, 1);
+        t->temp = sqlite3_column_double(st, 2);
+        t->corriente = sqlite3_column_double(st, 3);
+        res = 1;
+    } else if (rc != SQLITE_DONE) {
+        fprintf(stderr, "Error al leer la cola: %s\n", sqlite3_errmsg(db));
+        res = -1;
+    }
+    sqlite3_finalize(st);
+    return res;
+}
+
+int datos_marcar_enviada(sqlite3 *db, long long seq)
+{
+    return ejecutar_con_seq(db, "UPDATE telemetria SET enviado = 1 WHERE seq = ?;", seq);
+}
+
+int datos_sumar_intento(sqlite3 *db, long long seq)
+{
+    return ejecutar_con_seq(db, "UPDATE telemetria SET intentos = intentos + 1 WHERE seq = ?;", seq);
+}
+
+long long datos_contar_pendientes(sqlite3 *db)
+{
+    sqlite3_stmt *st = NULL;
+    if (sqlite3_prepare_v2(db, "SELECT COUNT(*) FROM telemetria WHERE enviado = 0;",
+                           -1, &st, NULL) != SQLITE_OK) {
+        fprintf(stderr, "Error al preparar: %s\n", sqlite3_errmsg(db));
+        return -1;
+    }
+    long long n = -1;
+    if (sqlite3_step(st) == SQLITE_ROW)
+        n = sqlite3_column_int64(st, 0);
+    sqlite3_finalize(st);
+    return n;
+}

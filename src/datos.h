@@ -51,4 +51,30 @@ typedef struct {
 /* Calcula las estadísticas de una máquina. Devuelve 0 si va bien. */
 int datos_analizar_maquina(sqlite3 *db, const char *maquina, double umbral, Analisis *a);
 
+/* Una lectura propia de la tabla telemetria (niveles 3 y 4). */
+typedef struct {
+    long long seq;
+    long long ts;
+    double    temp;
+    double    corriente;
+} Telemetria;
+
+/* Guarda una lectura nueva con enviado = 0. El seq es MAX(seq)+1, así
+   sobrevive a reinicios porque vive en la base. Devuelve 0 si va bien. */
+int datos_nueva_telemetria(sqlite3 *db, long long ts, double temp, double corriente,
+                           long long *seq);
+
+/* Busca la pendiente más antigua (menor seq con enviado = 0).
+   Devuelve 1 si hay una, 0 si la cola está vacía, -1 si hay error. */
+int datos_siguiente_pendiente(sqlite3 *db, Telemetria *t);
+
+/* Marca una lectura como enviada (enviado = 1). */
+int datos_marcar_enviada(sqlite3 *db, long long seq);
+
+/* Suma 1 a intentos de una lectura. */
+int datos_sumar_intento(sqlite3 *db, long long seq);
+
+/* Cuántas lecturas quedan sin enviar. Devuelve -1 si hay error. */
+long long datos_contar_pendientes(sqlite3 *db);
+
 #endif

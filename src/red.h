@@ -13,7 +13,8 @@ typedef struct {
 
 /* Conexión con el servidor: un solo easy handle que se reutiliza. */
 typedef struct {
-    CURL *curl;
+    CURL *curl;         /* handle para HTTP */
+    CURL *mqtt;         /* handle aparte para publicar por MQTT */
     char  host[256];
     char  token[64];
     char  matricula[32];
@@ -38,6 +39,10 @@ long red_post(Red *r, const char *ruta, const char *json, Respuesta *resp);
    Devuelve el último código obtenido (o -1). */
 long red_get_reintentos(Red *r, const char *ruta, Respuesta *resp);
 long red_post_reintentos(Red *r, const char *ruta, const char *json, Respuesta *resp);
+
+/* Publica un mensaje MQTT (QoS 0) en un tópico, con usuario = matrícula y
+   contraseña = token. Devuelve 0 si se publicó, -1 si falló (no reintenta). */
+int red_publicar_mqtt(Red *r, const char *topico, const char *mensaje);
 
 /* Pausa en milisegundos (para respetar el límite de 5 peticiones/s). */
 void red_esperar_ms(long ms);

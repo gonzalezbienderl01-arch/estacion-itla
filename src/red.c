@@ -51,8 +51,12 @@ int red_iniciar(Red *r)
         return -1;
     }
     r->curl = curl_easy_init();
-    if (r->curl == NULL) {
+    r->mqtt = curl_easy_init();
+    if (r->curl == NULL || r->mqtt == NULL) {
         fprintf(stderr, "Error: curl_easy_init falló\n");
+        curl_easy_cleanup(r->curl);     /* acepta NULL */
+        curl_easy_cleanup(r->mqtt);
+        r->curl = r->mqtt = NULL;
         curl_global_cleanup();
         return -1;
     }
@@ -61,11 +65,13 @@ int red_iniciar(Red *r)
 
 void red_cerrar(Red *r)
 {
-    if (r->curl != NULL) {
-        curl_easy_cleanup(r->curl);
-        r->curl = NULL;
-        curl_global_cleanup();
-    }
+    if (r->curl == NULL && r->mqtt == NULL)
+        return;                     /* ya cerrada o nunca abierta */
+    curl_easy_cleanup(r->curl);     /* acepta NULL */
+    curl_easy_cleanup(r->mqtt);
+    r->curl = NULL;
+    r->mqtt = NULL;
+    curl_global_cleanup();
 }
 
 void respuesta_liberar(Respuesta *resp)
@@ -202,4 +208,30 @@ long red_get_reintentos(Red *r, const char *ruta, Respuesta *resp)
 long red_post_reintentos(Red *r, const char *ruta, const char *json, Respuesta *resp)
 {
     return con_reintentos(r, ruta, json, resp);
+}
+
+int red_publicar_mqtt(Red *r, const char *topico, const char *mensaje)
+{
+    char url[512];
+    int k = snprintf(url, sizeof url, "mqtt://%s:1883/%s", r->host, topico);
+    if (k < 0 || (size_t)k >= sizeof url) {
+        fprintf(stderr, "Error: URL MQTT demasiado larga\n");
+        return -1;
+    }
+
+    curl_easy_reset(r->mqtt);
+    curl_easy_setopt(r->mqtt, CURLOPT_URL, url);
+    curl_easy_setopt(r->mqtt, CURLOPT_USERNAME, r->matricula);
+    curl_easy_setopt(r->mqtt, CURLOPT_PASSWORD, r->token);
+    curl_easy_setopt(r->mqtt, CURLOPT_POSTFIELDS, mensaje);   /* con cuerpo = publicar */
+    curl_easy_setopt(r->mqtt, CURLOPT_TIMEOUT, TIMEOUT_S);
+    curl_easy_setopt(r->mqtt, CURLOPT_CONNECTTIMEOUT, CONNECT_S);
+
+    CURLcode rc = curl_easy_perform(r->mqtt);
+    if (rc != CURLE_OK) {
+        fprintf(stderr, "MQTT: no se pudo publicar en %s: %s\n",
+                topico, curl_easy_strerror(rc));
+        return -1;
+    }
+    return 0;
 }
