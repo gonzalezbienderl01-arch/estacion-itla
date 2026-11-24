@@ -30,7 +30,7 @@ make clean
 |---|---|---|
 | `./estacion config` | 0 · Hola servidor | listo |
 | `./estacion descargar` | 1 · Descarga completa | listo |
-| `./estacion analizar` | 2 · Análisis SQL | pendiente |
+| `./estacion analizar` | 2 · Análisis SQL | listo (`--ver` muestra sin enviar) |
 | `./estacion enviar` | 3 y 4 · Telemetría y latido | pendiente |
 | `./estacion escuchar` | 5 · Alarmas MQTT | pendiente |
 
@@ -49,4 +49,6 @@ make clean
 - **Una sola transacción** para toda la descarga: si falla una página, `ROLLBACK` y la base queda como estaba.
 - **CSV con campos vacíos**: se separa con `strchr` (no `strtok`, que se salta `,,`). Un campo vacío o no numérico se guarda como `NULL`.
 - **`filas_unicas` y `suma_ids` se calculan con SQL** (`COUNT(*)`, `SUM(id)`), no con contadores en C.
+- **Vista `lecturas_clasificadas`**: añade la columna `valida` (1/0) con un `CASE`. Una fila es inválida si `estado` no es `OK`, si `temp = -999.0` o si falta cualquier campo (`NULL`). Las estadísticas se calculan sobre esa vista con `COUNT/SUM`, `MIN`, `MAX`, `ROUND(AVG(temp), 2)` y `temp > umbral_temp`, todo en SQL.
+- **`analizar --ver`**: calcula y muestra el JSON sin enviarlo, para revisar antes de gastar uno de los 10 intentos.
 - **Límite de ritmo**: pausa de 250 ms entre páginas (4 peticiones/s). Ante 429/503 se espera lo que diga `Retry-After`; ante fallo de red, 1, 2, 4 ... hasta 30 s.

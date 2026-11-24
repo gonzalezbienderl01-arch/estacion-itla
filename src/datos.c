@@ -25,7 +25,16 @@ static const char *ESQUEMA =
     "CREATE TABLE IF NOT EXISTS alarmas ("
     "  codigo TEXT PRIMARY KEY,"
     "  maquina TEXT, ts_servidor INTEGER,"
-    "  ts_recibida INTEGER, ts_ack INTEGER);";
+    "  ts_recibida INTEGER, ts_ack INTEGER);"
+    /* Vista del nivel 2: marca cada lectura como válida (1) o inválida (0).
+       Inválida si estado no es OK, si temp vale -999.0 o si falta algún campo. */
+    "DROP VIEW IF EXISTS lecturas_clasificadas;"
+    "CREATE VIEW lecturas_clasificadas AS"
+    "  SELECT *, CASE WHEN estado = 'OK' AND temp <> -999.0"
+    "    AND maquina IS NOT NULL AND ts IS NOT NULL AND temp IS NOT NULL"
+    "    AND corriente IS NOT NULL AND vibracion IS NOT NULL"
+    "    THEN 1 ELSE 0 END AS valida"
+    "  FROM lecturas_planta;";
 
 /* Ejecuta SQL fijo y muestra el error si lo hay. */
 static int ejecutar(sqlite3 *db, const char *sql)
@@ -269,6 +278,43 @@ int datos_resumen_lecturas(sqlite3 *db, long long *filas, long long *suma_ids)
         res = 0;
     } else {
         fprintf(stderr, "Error al contar lecturas: %s\n", sqlite3_errmsg(db));
+    }
+    sqlite3_finalize(st);
+    return res;
+}
+
+int datos_analizar_maquina(sqlite3 *db, const char *maquina, double umbral, Analisis *a)
+{
+    /* Todo el cálculo lo hace SQL; C solo lee una fila de resultado. */
+    const char *sql =
+        "SELECT"
+        "  COALESCE(SUM(valida), 0),"
+        "  COALESCE(SUM(1 - valida), 0),"
+        "  MIN(CASE WHEN valida = 1 THEN temp END),"
+        "  MAX(CASE WHEN valida = 1 THEN temp END),"
+        "  ROUND(AVG(CASE WHEN valida = 1 THEN temp END), 2),"
+        "  COALESCE(SUM(CASE WHEN valida = 1 AND temp > ? THEN 1 ELSE 0 END), 0)"
+        " FROM lecturas_clasificadas WHERE maquina = ?;";
+    sqlite3_stmt *st = NULL;
+    if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) != SQLITE_OK) {
+        fprintf(stderr, "Error al preparar: %s\n", sqlite3_errmsg(db));
+        return -1;
+    }
+    sqlite3_bind_double(st, 1, umbral);
+    sqlite3_bind_text(st, 2, maquina, -1, SQLITE_STATIC);
+
+    int res = -1;
+    if (sqlite3_step(st) == SQLITE_ROW) {
+        snprintf(a->maquina, sizeof a->maquina, "%s", maquina);
+        a->validas      = sqlite3_column_int64(st, 0);
+        a->descartadas  = sqlite3_column_int64(st, 1);
+        a->temp_min     = sqlite3_column_double(st, 2);
+        a->temp_max     = sqlite3_column_double(st, 3);
+        a->temp_prom    = sqlite3_column_double(st, 4);
+        a->sobre_umbral = sqlite3_column_int64(st, 5);
+        res = 0;
+    } else {
+        fprintf(stderr, "Error al analizar %s: %s\n", maquina, sqlite3_errmsg(db));
     }
     sqlite3_finalize(st);
     return res;

@@ -37,4 +37,18 @@ int datos_guardar_lecturas(sqlite3 *db, char *csv, Pagina *pag);
 /* COUNT(*) y SUM(id) de lecturas_planta. Devuelve 0 si va bien. */
 int datos_resumen_lecturas(sqlite3 *db, long long *filas, long long *suma_ids);
 
+/* Estadísticas de una máquina (nivel 2), calculadas con SQL. */
+typedef struct {
+    char      maquina[16];
+    long long validas;
+    long long descartadas;
+    double    temp_min;
+    double    temp_max;
+    double    temp_prom;     /* ya redondeado a 2 decimales por SQL */
+    long long sobre_umbral;  /* lecturas válidas con temp > umbral_temp */
+} Analisis;
+
+/* Calcula las estadísticas de una máquina. Devuelve 0 si va bien. */
+int datos_analizar_maquina(sqlite3 *db, const char *maquina, double umbral, Analisis *a);
+
 #endif
