@@ -78,3 +78,18 @@ Dejar ambas corriendo al menos 15 minutos y terminar con Ctrl+C.
 - **Ctrl+C en `escuchar`**: `CURLOPT_NOPROGRESS = 0` con una `CURLOPT_XFERINFOFUNCTION` que devuelve 1 cuando la bandera de SIGINT está puesta; así `perform` se corta aunque esté bloqueado.
 - **Dos procesos, una base**: `PRAGMA journal_mode=WAL` y `sqlite3_busy_timeout(db, 2000)` evitan `database is locked`.
 - **Límite de ritmo**: pausa de 250 ms entre páginas (4 peticiones/s). Ante 429/503 se espera lo que diga `Retry-After`; ante fallo de red, 1, 2, 4 ... hasta 30 s.
+
+## Resultados
+
+Progreso final en el servidor del reto (`/api/v1/mi-progreso`): **70/70**.
+
+| Nivel | Puntos | Métricas |
+|---|---|---|
+| 0 · Hola servidor | 5/5 | M1 autenticación correcta |
+| 1 · Descarga | 10/10 | M2 = exacto (2000 filas únicas) |
+| 2 · Análisis | 15/15 | M3 = 24/24 en el primer intento |
+| 3 · Telemetría | 15/15 | M5 = 100 %, M6 = 2/2 caídas, M7 = 0 |
+| 4 · Latido | 10/10 | M8 = 100 % |
+| 5 · Alarmas | 15/15 | M9 = 100 %, M10 = 0.26 s |
+
+M11 (peticiones con 400/429) = 0 %.
